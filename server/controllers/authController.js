@@ -4,19 +4,23 @@ const CreditTransaction = require('../models/CreditTransaction');
 const Notification = require('../models/Notification');
 
 const signToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'supersecretjwtkeyfordevelopmentpurpose', {
-    expiresIn: '30d'
-  });
+  return jwt.sign(
+    { id },
+    process.env.JWT_SECRET || 'supersecretjwtkeyfordevelopmentpurpose',
+    {
+      expiresIn: '30d'
+    }
+  );
 };
 
 const sendTokenResponse = (user, statusCode, res) => {
   const token = signToken(user._id);
 
   const cookieOptions = {
-    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production'
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   };
 
   user.password = undefined;
@@ -33,15 +37,24 @@ const sendTokenResponse = (user, statusCode, res) => {
 
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password, role, skillsOffered, skillsWanted } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role,
+      skillsOffered,
+      skillsWanted
+    } = req.body;
 
-    // Check if user already exists
     const userExists = await User.findOne({ email });
+
     if (userExists) {
-      return res.status(400).json({ success: false, message: 'Email already registered' });
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered'
+      });
     }
 
-    // Create user with default 20 credits
     const user = await User.create({
       name,
       email,
@@ -52,7 +65,6 @@ exports.register = async (req, res, next) => {
       credits: 20
     });
 
-    // Log the signup credit transaction
     await CreditTransaction.create({
       user: user._id,
       type: 'bonus',
@@ -60,11 +72,11 @@ exports.register = async (req, res, next) => {
       description: 'Signup welcome bonus credits'
     });
 
-    // Create welcome notification
     await Notification.create({
       user: user._id,
       title: 'Welcome to SkillSwap!',
-      message: 'You have been awarded 20 free learning credits to get started.',
+      message:
+        'You have been awarded 20 free learning credits to get started.',
       type: 'credit'
     });
 
@@ -79,36 +91,47 @@ exports.login = async (req, res, next) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email and password'
+      });
     }
 
     const user = await User.findOne({ email }).select('+password');
+
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
     const isMatch = await user.matchPassword(password);
+
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
-    // Daily streak logic
     const today = new Date().toDateString();
-    const lastActiveDate = user.lastActive ? new Date(user.lastActive).toDateString() : null;
-    
+    const lastActiveDate = user.lastActive
+      ? new Date(user.lastActive).toDateString()
+      : null;
+
     if (lastActiveDate !== today) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toDateString();
-      
-      if (lastActiveDate === yesterdayStr) {
+
+      if (lastActiveDate === yesterday.toDateString()) {
         user.streak += 1;
-        // Award XP on streak increase
         user.xp += 10;
+
         if (user.xp >= user.level * 100) {
           user.xp = 0;
           user.level += 1;
-          
+
           await Notification.create({
             user: user._id,
             title: 'Level Up!',
@@ -119,6 +142,7 @@ exports.login = async (req, res, next) => {
       } else {
         user.streak = 1;
       }
+
       user.lastActive = new Date();
       await user.save();
     }
@@ -129,21 +153,23 @@ exports.login = async (req, res, next) => {
   }
 };
 
-exports.logout = async (req, res, next) => {
-  res.cookie('token', 'none', {
-    expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true
+exports.logout = async (req, res) => {
+  res.cookie('token', '', {
+    expires: new Date(0),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   });
 
   res.status(200).json({
-    success: true,
-    data: {}
+    success: true
   });
 };
 
 exports.getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).populate('badges');
+
     res.status(200).json({
       success: true,
       user
