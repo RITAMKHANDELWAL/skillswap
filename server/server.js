@@ -1,3 +1,14 @@
+process.on("uncaughtException", (err) => {
+  console.error("========== UNCAUGHT EXCEPTION ==========");
+  console.error(err);
+  console.error(err.stack);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("========== UNHANDLED REJECTION ==========");
+  console.error(err);
+});
+
 const http = require('http');
 require('dotenv').config();
 
@@ -11,7 +22,7 @@ connectDB();
 // HTTP server wrapper for Socket.io integration
 const server = http.createServer(app);
 
-// Initialize Socket.io
+// Initialize Socket.ios
 initSocket(server);
 
 const PORT = process.env.PORT || 5000;
@@ -26,3 +37,4 @@ process.on('unhandledRejection', (err, promise) => {
   // Close server & exit process
   // server.close(() => process.exit(1));
 });
+
